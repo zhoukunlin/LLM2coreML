@@ -156,6 +156,237 @@ func loadModel() {
 }
 ```
 
+## 在Xcode中使用转换后的CoreML模型
+
+### 准备工作
+
+1. 确保已成功转换模型，并找到`.mlpackage`文件
+2. 安装最新版Xcode（推荐Xcode 14或更高版本）
+
+### 导入模型到Xcode项目
+
+1. 打开Xcode并创建新项目或打开现有项目
+2. 在Project Navigator中，右键点击项目，选择"Add Files to [项目名]..."
+3. 导航到并选择转换好的CoreML模型文件（例如：`phi-3-mini-4k-instruct.mlpackage`）
+4. 在弹出的对话框中，确保勾选"Copy items if needed"选项
+5. 点击"Add"按钮完成导入
+
+### 生成Swift/Objective-C模型类
+
+Xcode会自动为CoreML模型生成对应的Swift/Objective-C包装类：
+
+1. 在Project Navigator中选择导入的`.mlpackage`文件
+2. Xcode会显示模型详情和自动生成的代码
+3. 检查模型的输入和输出规格，确保与预期一致
+
+### 在Swift代码中使用模型
+
+```swift
+import CoreML
+import NaturalLanguage
+
+class LLMService {
+    private var model: MLModel?
+    private let tokenizer = NLTokenizer(using: .wordUnit)
+    
+    init() {
+        do {
+            // 配置计算单元
+            let config = MLModelConfiguration()
+            config.computeUnits = .all  // 使用所有可用计算单元
+            
+            // 加载模型
+            // 注意：生成的模型类名取决于您的模型文件名
+            if let modelURL = Bundle.main.url(forResource: "phi-3-mini-4k-instruct", withExtension: "mlpackage") {
+                model = try MLModel(contentsOf: modelURL, configuration: config)
+                print("模型加载成功")
+            } else {
+                print("找不到模型文件")
+            }
+        } catch {
+            print("模型加载失败: \(error)")
+        }
+    }
+    
+    func generateResponse(prompt: String) -> String? {
+        guard let model = model else { return nil }
+        
+        do {
+            // 这里需要实现tokenization逻辑，将文本转换为模型所需的inputIds和attentionMask
+            // 这是一个简化示例，实际实现需要使用与模型匹配的tokenizer
+            let inputIds = tokenizeText(prompt)
+            let attentionMask = generateAttentionMask(for: inputIds)
+            
+            // 创建模型输入
+            let inputFeatures = try MLDictionaryFeatureProvider(dictionary: [
+                "input_ids": inputIds,
+                "attention_mask": attentionMask
+            ])
+            
+            // 执行推理
+            let prediction = try model.prediction(from: inputFeatures)
+            
+            // 处理输出结果
+            if let outputFeatures = prediction.featureValue(for: "logits"),
+               let logits = outputFeatures.multiArrayValue {
+                // 这里需要将logits转换回文本
+                return decodeLogits(logits)
+            }
+            
+            return nil
+        } catch {
+            print("生成过程出错: \(error)")
+            return nil
+        }
+    }
+    
+    // 实现tokenization
+    private func tokenizeText(_ text: String) -> MLMultiArray {
+        // 实际应用中，需要使用与模型相同的tokenizer
+        // 这里只是示例代码结构
+        return MLMultiArray()
+    }
+    
+    private func generateAttentionMask(for inputIds: MLMultiArray) -> MLMultiArray {
+        // 生成注意力掩码
+        return MLMultiArray()
+    }
+    
+    private func decodeLogits(_ logits: MLMultiArray) -> String? {
+        // 将模型输出的logits解码为文本
+        return ""
+    }
+}
+```
+
+### 在SwiftUI中集成
+
+```swift
+import SwiftUI
+
+struct ContentView: View {
+    @State private var inputText = ""
+    @State private var outputText = ""
+    @State private var isGenerating = false
+    
+    private let llmService = LLMService()
+    
+    var body: some View {
+        VStack {
+            Text("LLM演示")
+                .font(.title)
+                .padding()
+            
+            TextEditor(text: $inputText)
+                .frame(height: 150)
+                .border(Color.gray, width: 1)
+                .padding()
+            
+            Button(action: generateResponse) {
+                Text(isGenerating ? "生成中..." : "生成回复")
+                    .frame(width: 200)
+                    .padding()
+                    .background(isGenerating ? Color.gray : Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .disabled(isGenerating || inputText.isEmpty)
+            .padding()
+            
+            Text("回复:")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+            
+            TextEditor(text: $outputText)
+                .frame(height: 200)
+                .border(Color.gray, width: 1)
+                .padding()
+                .disabled(true)
+            
+            Spacer()
+        }
+        .padding()
+    }
+    
+    func generateResponse() {
+        isGenerating = true
+        
+        // 在后台线程执行模型推理
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = self.llmService.generateResponse(prompt: inputText)
+            
+            // 回到主线程更新UI
+            DispatchQueue.main.async {
+                outputText = result ?? "生成失败"
+                isGenerating = false
+            }
+        }
+    }
+}
+```
+
+### 优化性能
+
+1. **使用适当的计算单元**：
+   ```swift
+   let config = MLModelConfiguration()
+   // 使用所有计算单元
+   config.computeUnits = .all
+   // 或者只使用CPU（更节能）
+   // config.computeUnits = .cpuOnly
+   // 或者只使用Neural Engine（更快）
+   // config.computeUnits = .cpuAndNeuralEngine
+   ```
+
+2. **批处理输入**：如果需要处理多个请求，考虑使用批处理
+
+3. **内存管理**：对于大型模型，注意内存使用和释放，尤其在iOS设备上
+
+### 在UIKit应用中使用
+
+对于UIKit应用，集成方式类似，只是UI层的实现不同：
+
+```swift
+import UIKit
+import CoreML
+
+class ViewController: UIViewController {
+    private let inputTextView = UITextView()
+    private let outputTextView = UITextView()
+    private let generateButton = UIButton()
+    private let llmService = LLMService()
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        setupUI()
+    }
+    
+    private func setupUI() {
+        // 设置UI组件
+        // ...
+        
+        generateButton.addTarget(self, action: #selector(generateResponse), for: .touchUpInside)
+    }
+    
+    @objc private func generateResponse() {
+        guard let inputText = inputTextView.text, !inputText.isEmpty else { return }
+        
+        generateButton.isEnabled = false
+        generateButton.setTitle("生成中...", for: .normal)
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = self.llmService.generateResponse(prompt: inputText)
+            
+            DispatchQueue.main.async {
+                self.outputTextView.text = result ?? "生成失败"
+                self.generateButton.isEnabled = true
+                self.generateButton.setTitle("生成回复", for: .normal)
+            }
+        }
+    }
+}
+```
+
 ## 复用已下载的模型文件
 
 如果您之前已经下载过模型，可以使用`copy_model_cache.py`工具将缓存的模型文件复制到工作目录，避免重复下载：
@@ -191,6 +422,22 @@ python copy_model_cache.py --list
 如果特定模型转换失败，可能是因为模型架构不完全兼容，请尝试：
 - 检查错误日志中的具体错误信息（保存在输出目录中）
 - 尝试使用较新版本的依赖库（特别是transformers和coremltools）
+
+### 设备发热问题
+大型模型的转换过程计算密集，可能导致设备显著发热：
+
+- **实际案例**：在MacBook Air M1 16GB上转换phi-3-mini-128k模型时出现明显发热现象
+- **降温建议**：
+  - 确保设备放置在平整、通风良好的表面
+  - 可使用笔记本散热支架
+  - 如需紧急降温，可以使用酒精湿巾（或冰袋隔着毛巾）轻轻接触笔记本背面进行物理降温
+  - 转换大型模型时建议在凉爽环境中操作
+  - 考虑在晚上或者非高峰时段运行转换任务
+
+- **性能对比**：
+  - MacBook Air M1（16GB内存）：转换phi-3-mini-128k时显著发热，需辅助降温
+  - MacBook Pro 14"/16"（M1 Pro/Max）：散热更好，发热相对较轻
+  - 台式Mac（Mac Studio/Mac mini）：散热最佳，推荐用于大型模型转换
 
 ## 注意事项
 
