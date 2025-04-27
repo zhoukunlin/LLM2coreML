@@ -1,0 +1,51 @@
+# 模型相关文件
+models/
+*.mlpackage/
+*.mlmodel
+*.onnx
+*.bin
+*.safetensors
+*.h5
+
+# Python 缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+.env
+env/
+
+# 日志文件
+*.log
+
+# macOS相关文件
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# 编辑器相关
+.idea/
+.vscode/
+*.swp
+*.swo 
