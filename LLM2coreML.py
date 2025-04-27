@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-# Phi-3到CoreML转换脚本
+# 通用LLM到CoreML转换工具
+# 专为Apple设备优化的大型语言模型转换脚本
+# 只需修改模型ID即可转换不同的模型
 
 import os
 import torch
@@ -18,6 +20,29 @@ from pathlib import Path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CACHE_DIR = SCRIPT_DIR
 DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "models")
+
+# 支持的LLM模型示例
+SUPPORTED_MODELS = {
+    "phi": [
+        "microsoft/phi-3-mini-4k-instruct",      # 默认模型，推荐首选
+        "microsoft/phi-3-mini-128k-instruct",    # 上下文窗口更大的版本
+        "microsoft/phi-3-medium-4k-instruct",    # 更强大的Phi-3 medium版本
+    ],
+    "gemma": [
+        "google/gemma-2b",                       # 轻量级Gemma
+        "google/gemma-7b",                       # 完整版Gemma
+    ],
+    "llama": [
+        "meta-llama/Llama-2-7b-chat-hf",         # Llama 2聊天模型
+        "meta-llama/Llama-2-13b-chat-hf",        # 更大的Llama 2聊天模型
+    ],
+    "mistral": [
+        "mistralai/Mistral-7B-Instruct-v0.2",    # Mistral指令模型
+    ],
+    "qwen": [
+        "Qwen/Qwen-1_8B-Chat",                   # 通义千问轻量版
+    ]
+}
 
 def install_dependencies():
     """安装必要的依赖项"""
@@ -41,8 +66,9 @@ def install_dependencies():
         print(f"❌ 安装依赖项时出错: {str(e)}")
         return False
 
-def convert_phi3_to_coreml(
-    model_id="microsoft/phi-3-mini-4k-instruct",
+def convert_llm_to_coreml(
+    # ===== 只需修改这里的模型ID，即可转换不同的LLM模型 =====
+    model_id="microsoft/phi-3-mini-4k-instruct",  # 默认使用Phi-3-mini-4k模型
     output_dir=None,
     max_seq_len=4096,
     compute_units=ct.ComputeUnit.CPU_ONLY,
@@ -50,7 +76,13 @@ def convert_phi3_to_coreml(
     cache_dir=None
 ):
     """
-    将Phi-3模型转换为CoreML格式
+    将任意LLM模型转换为CoreML格式
+    
+    只需修改model_id参数，即可一键转换不同的模型，例如：
+    - microsoft/phi-3-mini-4k-instruct (默认)
+    - google/gemma-2b
+    - meta-llama/Llama-2-7b-chat-hf
+    - mistralai/Mistral-7B-Instruct-v0.2
     
     参数:
         model_id (str): Hugging Face模型ID
@@ -75,26 +107,31 @@ def convert_phi3_to_coreml(
         if cache_dir is None:
             cache_dir = DEFAULT_CACHE_DIR
         
-        print(f"使用模型: {model_id}")
-        print(f"输出目录: {output_dir}")
-        print(f"最大序列长度: {max_seq_len}")
-        print(f"计算单元: {compute_units}")
-        print(f"使用float16: {use_float16}")
-        print(f"缓存目录: {cache_dir}")
+        print(f"🚀 开始转换模型 {model_id} 为CoreML格式")
+        print(f"📋 转换配置:")
+        print(f"   - 模型ID: {model_id}")
+        print(f"   - 输出目录: {output_dir}")
+        print(f"   - 最大序列长度: {max_seq_len}")
+        print(f"   - 计算单元: {compute_units}")
+        print(f"   - 使用float16: {use_float16}")
+        print(f"   - 缓存目录: {cache_dir}")
         
         # 创建输出目录
         os.makedirs(output_dir, exist_ok=True)
         
         # 加载预训练分词器
-        print("加载分词器...")
-        tokenizer_kwargs = {"local_files_only": False}
+        print("\n📚 加载分词器...")
+        tokenizer_kwargs = {
+            "local_files_only": False,
+            "trust_remote_code": True
+        }
         if cache_dir:
             tokenizer_kwargs["cache_dir"] = cache_dir
             
         tokenizer = AutoTokenizer.from_pretrained(model_id, **tokenizer_kwargs)
         
         # 加载模型
-        print("加载模型...")
+        print("🧠 加载模型...")
         model_kwargs = {
             "torch_dtype": torch.float16 if use_float16 else torch.float32,
             "trust_remote_code": True,
@@ -108,12 +145,12 @@ def convert_phi3_to_coreml(
         model.eval()
         
         # 创建示例输入
-        sample_text = "你好"
+        sample_text = "你好，请告诉我你是谁。"
         inputs = tokenizer(sample_text, return_tensors="pt")
         input_ids = inputs["input_ids"]
         attention_mask = inputs["attention_mask"]
         
-        print(f"示例输入形状: {input_ids.shape}")
+        print(f"📊 示例输入形状: {input_ids.shape}")
         
         # 简化的模型类
         class SimpleModel(torch.nn.Module):
@@ -129,7 +166,7 @@ def convert_phi3_to_coreml(
         wrapped_model = SimpleModel(model)
         
         # 使用JIT追踪
-        print("使用JIT追踪模型...")
+        print("🔍 使用JIT追踪模型...")
         with torch.no_grad():
             traced_model = torch.jit.trace(
                 wrapped_model,
@@ -147,7 +184,7 @@ def convert_phi3_to_coreml(
         output_path = os.path.join(output_dir, f"{model_name}.mlpackage")
         
         # 转换为CoreML
-        print("转换为CoreML格式...")
+        print("⚙️ 转换为CoreML格式...")
         mlmodel = ct.convert(
             traced_model,
             inputs=input_specs,
@@ -156,7 +193,7 @@ def convert_phi3_to_coreml(
         )
         
         # 保存模型
-        print(f"保存CoreML模型到: {output_path}")
+        print(f"💾 保存CoreML模型到: {output_path}")
         mlmodel.save(output_path)
         
         # 计算转换时间
@@ -177,12 +214,12 @@ def convert_phi3_to_coreml(
         with open(success_path, "w") as f:
             json.dump(success_info, f, indent=2)
         
-        print(f"✅ 转换成功! 用时: {str(datetime.timedelta(seconds=int(conversion_time)))}")
+        print(f"\n✅ 转换成功! 用时: {str(datetime.timedelta(seconds=int(conversion_time)))}")
         return True, output_path
     
     except Exception as e:
         error_message = str(e)
-        print(f"❌ 转换失败: {error_message}")
+        print(f"\n❌ 转换失败: {error_message}")
         
         # 保存错误信息
         if output_dir:
@@ -199,8 +236,20 @@ def convert_phi3_to_coreml(
         
         return False, error_message
 
+def list_supported_models():
+    """列出支持的模型示例"""
+    print("\n📋 支持的LLM模型示例（可通过--model_id参数使用）:")
+    
+    for category, models in SUPPORTED_MODELS.items():
+        print(f"\n📌 {category.upper()} 系列:")
+        for model in models:
+            print(f"  - {model}")
+    
+    print("\n⭐ 以及其他 Hugging Face 上的大型语言模型")
+    print("🔗 查看更多模型: https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads\n")
+
 def main():
-    parser = argparse.ArgumentParser(description="将Phi-3模型转换为CoreML格式")
+    parser = argparse.ArgumentParser(description="将任意LLM模型转换为CoreML格式，用于Apple设备")
     parser.add_argument("--model_id", type=str, default="microsoft/phi-3-mini-4k-instruct",
                       help="Hugging Face模型ID (默认: microsoft/phi-3-mini-4k-instruct)")
     parser.add_argument("--output_dir", type=str, default=None,
@@ -215,8 +264,15 @@ def main():
                       help=f"模型缓存目录 (默认: {DEFAULT_CACHE_DIR})")
     parser.add_argument("--install_deps", action="store_true",
                       help="安装依赖项 (默认: False)")
+    parser.add_argument("--list_models", action="store_true",
+                      help="列出支持的模型示例 (默认: False)")
     
     args = parser.parse_args()
+    
+    # 列出支持的模型
+    if args.list_models:
+        list_supported_models()
+        return
     
     # 安装依赖项
     if args.install_deps:
@@ -227,7 +283,7 @@ def main():
     # 设置计算单元
     compute_units = ct.ComputeUnit.CPU_AND_GPU if args.use_gpu else ct.ComputeUnit.CPU_ONLY
     
-    success, result = convert_phi3_to_coreml(
+    success, result = convert_llm_to_coreml(
         model_id=args.model_id,
         output_dir=args.output_dir,
         max_seq_len=args.max_seq_len,
@@ -237,11 +293,16 @@ def main():
     )
     
     if success:
-        print(f"\n转换成功! 模型保存在: {result}")
+        print(f"\n🎉 转换成功! 模型已保存至: {result}")
+        print("🍎 现在可以在Apple设备上使用此CoreML模型")
         sys.exit(0)
     else:
-        print(f"\n转换失败: {result}")
+        print(f"\n❌ 转换失败: {result}")
+        print("💡 提示: 尝试使用--use_float16参数减少内存使用，或选择更小的模型")
         sys.exit(1)
 
 if __name__ == "__main__":
+    print("=" * 80)
+    print("🍎 LLM2CoreML 转换工具 - 让大型语言模型在Apple设备上运行")
+    print("=" * 80)
     main() 
