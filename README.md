@@ -87,11 +87,28 @@ python phi3_to_coreml.py --model_id "microsoft/phi-3-mini-128k-instruct" --use_g
 - phi-3-mini-4k-instruct: 约4GB（CoreML格式）
 - phi-3-mini-128k-instruct: 约8GB（CoreML格式）
 
+## 复用已下载的模型文件
+
+如果您之前已经下载过模型，可以使用`copy_model_cache.py`工具将缓存的模型文件复制到工作目录，避免重复下载：
+
+```bash
+python copy_model_cache.py --model_id "microsoft/phi-3-mini-4k-instruct"
+```
+
+### 参数说明
+
+- `--model_id`：需要复制的模型ID，默认为"microsoft/phi-3-mini-4k-instruct"
+- `--target_dir`：目标目录，默认为以模型名称命名的文件夹
+- `--cache_dir`：自定义Hugging Face缓存目录，默认自动检测
+
+这个工具会自动查找Hugging Face的缓存目录，并将模型文件复制到指定位置。在macOS上，缓存通常位于`~/.cache/huggingface/`目录。
+
 ## 注意事项
 
 - 转换过程可能需要较长时间（取决于您的设备性能和模型大小）
 - 建议使用较小的模型（如phi-3-mini-4k-instruct）进行初次尝试
 - 转换过程中可能会下载模型文件，请确保网络连接畅通
+- 使用`copy_model_cache.py`工具可以重复利用已下载的模型文件，节省带宽和时间
 
 ## 贡献
 
